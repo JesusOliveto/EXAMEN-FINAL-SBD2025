@@ -1,0 +1,249 @@
+' EXAMEN FINAL – SISTEMAS DE BASES DE DATOS – INGENIERÍA INFORMÁTICA – 19-02-2025
+
+' SERVICIO DE TRANFERENCIA DE DINERO INTERNACIONAL – CASO WESTERN UNION.
+' Las agencias de transferencias internacionales como Western Union facilitan el envío de dinero entre distintos países mediante una red global de agentes y bancos. Su funcionamiento se basa en un modelo de remesas electrónicas, que permite a una persona enviar dinero a otra sin necesidad de que ambas tengan una cuenta bancaria.
+' 1. Iniciación de la Transferencia
+' El remitente puede iniciar la transferencia a través de dos métodos principales:
+' •	En una sucursal física: Completa un formulario y entrega el dinero en efectivo, o a través de una transferencia, o con tarjeta de débito.
+' •	En línea: A través del sitio web o la aplicación móvil de Western Union, utilizando una cuenta bancaria (transferencia) o tarjeta de débito.
+' Deben registrarse los siguientes datos de la operación:
+' -	Sucursal en la que se realizó la transferencia, 0 (cero) si fue realizada por la web.
+
+' -	Fecha y hora
+
+' -	Agente de WU (en el caso de haberse realizado en una sucursal).
+
+' -	Monto
+
+' -	Moneda en la cual se realiza la transferencia
+
+' -	Método de entrega del dinero (efectivo, transferencia, tarjeta de débito)
+
+' -	CBU (si la entrega fue realizada a través de una transferencia)
+
+' -	Código de la tarjeta de débito
+
+' -	Código de transferencia o MTCN (Money Transfer Control Number) (no obligatorio – se genera cuando se confirma la transacción). Es un número de 10 dígitos.
+
+' -	Remitente:
+' •	Nombre y apellidos completos.
+' •	Documento de identidad.
+' •	Teléfono
+' •	Email
+' -	Destinatario:
+' •	Nombre y apellidos completos.
+' •	Documento de identidad.
+' •	País de destino.
+' •	Método de recepción (efectivo en una sucursal o depósito en cuenta bancaria).
+' •	CBU de la cuenta bancaria si se seleccionó la recepción por ese canal.
+' •	Moneda en la que se desea recibir el monto transferido (opcional). Si no se informa se entrega en la moneda local o en la de la cuenta bancaria (si fue informada).
+' NOTA: Si el monto se recibirá en una cuenta bancaria no se informa, ya que la moneda será la de la cuenta.
+' WU mantiene los datos de remitentes y destinatarios como “clientes”.
+' También mantiene datos de las sucursales (número, denominación, localidad y país) y los agentes que trabajan en ellas (número, apellido, nombre).  
+' 2. Cálculo de comisiones y tipo de cambio
+' Western Union cobra una comisión (porcentaje del monto) por la transferencia, la cual varía según:
+' •	El monto enviado (rango: mínimo – máximo).
+' •	El país de origen y el país de destino.
+' •	El método de pago y el método de recepción.
+' Además, cuando la transferencia implica diferentes monedas, Western Union aplica un tipo de cambio que tiene una variación entre rangos de fechas.
+' 3. Procesamiento y Envío del Dinero
+' Una vez que se confirma el pago, Western Union procesa la transferencia y genera un código de transacción (MTCN, Money Transfer Control Number). Este código es fundamental, ya que el destinatario lo necesitará para retirar el dinero.
+' 4. Recepción del Dinero
+' El destinatario puede recibir el dinero mediante distintos canales:
+' •	Efectivo en una sucursal: Acude a un agente de Western Union con su documento de identidad y el código MTCN.
+' •	Depósito en cuenta bancaria: Se acredita automáticamente en la cuenta bancaria del destinatario.
+' En el momento de la recepción o que se acredita la transferencia se debe registrar la fecha-hora de la misma, la sucursal y el agente (si fue en una sucursal).
+
+' EJERCICIOS:
+' 1.	Diseñar un modelo lógico de datos para el problema (30)
+
+' 2.	Implementar la base de datos con todas las reglas de integridad que puedan implementarse de manera declarativa (PKs, UKs, FKs, CHECKs) y describir las reglas de integridad que no se pueden implementar de esa manera (10)
+
+' 3.	Controlar que para la fecha de entrega haya registrado el tipo de cambio entre la moneda de recepción y la de entrega. Solo si son monedas diferentes. Recordar que en todo momento la base de datos debe quedar en estado íntegro, por lo que no solo debe controlarse la operación de entrega. (35)
+
+' 4.	Programar una función escalar que reciba como argumento el identificador de una transferencia y devuelva el importe de comisión a cobrar en dólares (25)
+
+' ------------------------------------------------------------------------------
+
+' 1. Tabla Cliente
+' Registra a todas las personas involucradas en la transferencia (remitente y destinatario).
+
+' id_cliente (PK)
+' nombre
+' apellido
+' documento_identidad (UK)
+' telefono
+' email
+' 2. Tabla Sucursal
+' Registra las sucursales de Western Union.
+
+' id_sucursal (PK)
+' denominacion
+' localidad
+' pais
+' 3. Tabla Agente
+' Registra los agentes de Western Union que procesan transferencias en sucursales.
+
+' id_agente (PK)
+' id_sucursal (FK) → Sucursal
+' apellido
+' nombre
+' 4. Tabla Moneda
+' Registra las monedas disponibles.
+
+' id_moneda (PK)
+' codigo_iso (Ej: USD, EUR, ARS)
+' nombre
+' 5. Tabla Transferencia
+' Registra las transferencias realizadas.
+
+' id_transferencia (PK)
+' id_remitente (FK) → Cliente
+' id_destinatario (FK) → Cliente
+' id_sucursal (FK) → Sucursal (0 si es en línea)
+' id_agente (FK, NULLABLE) → Agente (NULL si es en línea)
+' fecha_hora
+' monto
+' id_moneda_envio (FK) → Moneda
+' metodo_envio (Enum: efectivo, transferencia, tarjeta de débito)
+' cbu_envio (NULLABLE)
+' codigo_tarjeta (NULLABLE)
+' mtcn (NULLABLE, 10 caracteres)
+' id_moneda_recepcion (FK) → Moneda (NULLABLE, si no se especificó)
+' 6. Tabla Recepcion
+' Registra la recepción del dinero.
+
+' id_recepcion (PK)
+' id_transferencia (FK, UK) → Transferencia
+' id_sucursal (FK) → Sucursal (0 si es depósito en cuenta bancaria)
+' id_agente (FK, NULLABLE) → Agente
+' fecha_hora
+' metodo_recepcion (Enum: efectivo, cuenta bancaria)
+' cbu_recepcion (NULLABLE)
+' 7. Tabla TipoCambio
+' Registra el tipo de cambio en fechas determinadas.
+
+' id_tipo_cambio (PK)
+' id_moneda_origen (FK) → Moneda
+' id_moneda_destino (FK) → Moneda
+' fecha_inicio
+' fecha_fin
+' tasa_cambio
+' 8. Tabla Comision
+' Registra las comisiones según distintos parámetros.
+
+' id_comision (PK)
+' monto_min
+' monto_max
+' id_pais_origen (FK) → Sucursal.pais
+' id_pais_destino (FK) → Sucursal.pais
+' metodo_envio
+' metodo_recepcion
+' porcentaje_comision
+
+
+class Cliente {
+    id_cliente: int
+    --
+    nombre: varchar
+    apellido: varchar
+    documento: varchar
+    telefono: varchar
+    email: varchar
+}
+
+class Pais {
+    id_pais: int
+    --
+    nombre: varchar
+}
+
+
+class Sucursal {
+    id_sucursal: int
+    --
+    nombre: varchar
+    localidad: varchar
+    id_pais: int
+}
+
+class Agente{
+    id_agente: int
+    --
+    id_sucursal: int
+    apellido: varchar
+    nombre: varchar
+}
+
+class Moneda {
+    id_moneda: int
+    --
+    codigo_iso: varchar 
+    nombre: varchar
+}
+
+class Transferencia {
+    id_transferencia: int
+    --
+    id_remitente: int
+    id_destinatario: int
+    id_sucursal: int
+    id_agente: int
+    fecha_hora: datetime
+    monto: float
+    id_moneda_envio: int
+    metodo_envio: varchar
+    cbu_envio: varchar
+    codigo_tarjeta: varchar
+    mtcn: varchar
+    id_moneda_recepcion: int
+}
+
+class Recepcion {
+    id_recepcion: int
+    --
+    id_transferencia: int
+    id_sucursal: int
+    id_agente: int
+    fecha_hora: datetime
+    metodo_recepcion: varchar
+    cbu_recepcion: varchar
+}
+
+class TipoCambio {
+    id_tipo_cambio: int
+    --
+    id_moneda_origen: int
+    id_moneda_destino: int
+    fecha_inicio: datetime
+    fecha_fin: datetime
+    tasa_cambio: float
+}
+
+class Comision {
+    id_comision: int
+    --
+    monto_min: float
+    monto_max: float
+    id_pais_origen: int
+    id_pais_destino: int
+    metodo_envio: varchar
+    metodo_recepcion: varchar
+    porcentaje_comision: float
+}
+
+
+Sucursal "1"..{ Agente
+Cliente "1"..{ Transferencia
+Sucursal "1"..{ Transferencia
+Agente "0"..{ Transferencia
+Moneda "0"..{ Transferencia
+Transferencia "1"..{ Recepcion
+Sucursal "1"..{ Recepcion
+Agente "0"..{ Recepcion
+Moneda "1"..{ TipoCambio
+Sucursal "1"..{ Comision
+
+Pais "1" ..{ Sucursal
+
+@enduml
