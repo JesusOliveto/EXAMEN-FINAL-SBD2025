@@ -205,11 +205,12 @@ class Transferencia {
     fecha_hora: datetime2
     monto: decimal(18,2)
     id_moneda_envio: int
+    id_moneda_recepcion: int
     id_metodo_pago: int
     cbu_envio: nvarchar(22)
     codigo_tarjeta: nvarchar(16)
     mtcn: char(10)
-    id_moneda_recepcion: int
+    id_pais_destino: int
 }
 
 class Recepcion {
@@ -267,5 +268,7 @@ Pais "1" ..{ Comision_Detalle
 MetodoPago "1" ..{ Comision_Detalle
 MetodoRecepcion "1" ..{ Comision_Detalle
 Pais "1" ..{ Cliente
+Pais "1" ..{ Transferencia
+Moneda "0" ..{ Recepcion
 
 @enduml

@@ -68,12 +68,12 @@
 
 --2 : IMPLEMENTACION DE LA BASE DE DATOS
 
-
 -- Creación de la base de datos
 CREATE DATABASE TransferenciasWU;
 GO
 USE TransferenciasWU;
 GO
+
 -- Tabla de Países
 CREATE TABLE Pais (
     id_pais INT PRIMARY KEY IDENTITY(1,1),
@@ -134,16 +134,17 @@ CREATE TABLE Transferencia (
     id_transferencia INT PRIMARY KEY IDENTITY(1,1),
     id_remitente INT NOT NULL,
     id_destinatario INT NOT NULL,
-    id_sucursal INT NULL,
+    id_sucursal INT NOT NULL,
     id_agente INT NULL,
     fecha_hora DATETIME2 NOT NULL,
     monto DECIMAL(18,2) NOT NULL,
     id_moneda_envio INT NOT NULL,
+    id_moneda_recepcion INT NULL,
     id_metodo_pago INT NOT NULL,
     cbu_envio NVARCHAR(22) NULL,
     codigo_tarjeta NVARCHAR(16) NULL,
     mtcn CHAR(10) NULL,
-    id_moneda_recepcion INT NULL,
+    id_pais_destino INT NOT NULL,
     FOREIGN KEY (id_remitente) REFERENCES Cliente(id_cliente),
     FOREIGN KEY (id_destinatario) REFERENCES Cliente(id_cliente),
     FOREIGN KEY (id_sucursal) REFERENCES Sucursal(id_sucursal),
@@ -151,11 +152,17 @@ CREATE TABLE Transferencia (
     FOREIGN KEY (id_moneda_envio) REFERENCES Moneda(id_moneda),
     FOREIGN KEY (id_moneda_recepcion) REFERENCES Moneda(id_moneda),
     FOREIGN KEY (id_metodo_pago) REFERENCES MetodoPago(id_metodo_pago),
+    FOREIGN KEY (id_pais_destino) REFERENCES Pais(id_pais),
     CONSTRAINT chk_cbu_o_tarjeta CHECK (
         (cbu_envio IS NOT NULL AND codigo_tarjeta IS NULL) OR
         (codigo_tarjeta IS NOT NULL AND cbu_envio IS NULL)
+    ),
+    CONSTRAINT chk_sucursal_web CHECK (
+        (id_sucursal = 0 AND id_agente IS NULL) OR (id_sucursal <> 0)
     )
 );
+--Se agrega redundancia en la moneda de recepción (id_moneda_recepcion) para definir en que moneda lo va a recibir el destinatario. Se deberá implementar una verificación para mantener la integridad.
+
 
 -- Tabla de Recepción del Dinero
 CREATE TABLE Recepcion (
@@ -179,19 +186,20 @@ CREATE TABLE TipoCambio (
     id_moneda_origen INT NOT NULL,
     id_moneda_destino INT NOT NULL,
     fecha_inicio DATETIME2 NOT NULL,
-    fecha_fin DATETIME2 NOT NULL,
+    fecha_fin DATETIME2 NULL,
     tasa_cambio DECIMAL(18,4) NOT NULL,
-    PRIMARY KEY (id_moneda_origen, id_moneda_destino, fecha_inicio, fecha_fin),
+    PRIMARY KEY (id_moneda_origen, id_moneda_destino, fecha_inicio),
     FOREIGN KEY (id_moneda_origen) REFERENCES Moneda(id_moneda),
     FOREIGN KEY (id_moneda_destino) REFERENCES Moneda(id_moneda),
-    CONSTRAINT chk_fecha_tipo_cambio CHECK (fecha_inicio < fecha_fin)
+    CONSTRAINT chk_fecha_tipo_cambio CHECK (fecha_inicio < ISNULL(fecha_fin, '9999-12-31'))
 );
 
 -- Tabla de Rango de Comisiones
 CREATE TABLE Comision_Rango (
     id_comision_rango INT PRIMARY KEY IDENTITY(1,1),
     monto_min DECIMAL(18,2) NOT NULL,
-    monto_max DECIMAL(18,2) NOT NULL
+    monto_max DECIMAL(18,2) NOT NULL,
+    CONSTRAINT chk_rango_monto CHECK (monto_min < monto_max)
 );
 
 -- Tabla de Detalles de Comisiones
@@ -209,3 +217,21 @@ CREATE TABLE Comision_Detalle (
     FOREIGN KEY (id_metodo_pago) REFERENCES MetodoPago(id_metodo_pago),
     FOREIGN KEY (id_metodo_recepcion) REFERENCES MetodoRecepcion(id_metodo_recepcion)
 );
+
+
+-- 3.	Controlar que para la fecha de entrega haya registrado el tipo de cambio entre la moneda de recepción y la de entrega. Solo si son monedas diferentes. Recordar que en todo momento la base de datos debe quedar en estado íntegro, por lo que no solo debe controlarse la operación de entrega. (35)
+
+--PASO 1: Programar una consulta que devuelva las filas que no cumplen con la regla de integridad
+
+SELECT t.id_transferencia
+FROM Transferencia t
+JOIN Recepcion r ON t.id_transferencia = r.id_transferencia
+WHERE t.id_moneda_recepcion <> t.id_moneda_envio
+AND NOT EXISTS (
+    SELECT 1
+    FROM TipoCambio tc
+    WHERE tc.id_moneda_origen = t.id_moneda_envio
+    AND tc.id_moneda_destino = t.id_moneda_recepcion
+    AND t.fecha_hora BETWEEN tc.fecha_inicio AND ISNULL(tc.fecha_fin, '9999-12-31')
+);
+
