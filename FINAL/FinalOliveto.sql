@@ -67,7 +67,6 @@
 
 
 --2 : IMPLEMENTACION DE LA BASE DE DATOS
-
 -- Creación de la base de datos
 CREATE DATABASE TransferenciasWU;
 GO
@@ -163,7 +162,6 @@ CREATE TABLE Transferencia (
 );
 --Se agrega redundancia en la moneda de recepción (id_moneda_recepcion) para definir en que moneda lo va a recibir el destinatario. Se deberá implementar una verificación para mantener la integridad.
 
-
 -- Tabla de Recepción del Dinero
 CREATE TABLE Recepcion (
     id_recepcion INT PRIMARY KEY IDENTITY(1,1),
@@ -219,19 +217,207 @@ CREATE TABLE Comision_Detalle (
 );
 
 
+
 -- 3.	Controlar que para la fecha de entrega haya registrado el tipo de cambio entre la moneda de recepción y la de entrega. Solo si son monedas diferentes. Recordar que en todo momento la base de datos debe quedar en estado íntegro, por lo que no solo debe controlarse la operación de entrega. (35)
 
 --PASO 1: Programar una consulta que devuelva las filas que no cumplen con la regla de integridad
 
-SELECT t.id_transferencia
+
+SELECT t.id_transferencia, 
+       t.id_moneda_envio, 
+       r.id_moneda_recepcion, 
+       r.fecha_hora AS fecha_recepcion
 FROM Transferencia t
 JOIN Recepcion r ON t.id_transferencia = r.id_transferencia
-WHERE t.id_moneda_recepcion <> t.id_moneda_envio
-AND NOT EXISTS (
-    SELECT 1
-    FROM TipoCambio tc
-    WHERE tc.id_moneda_origen = t.id_moneda_envio
-    AND tc.id_moneda_destino = t.id_moneda_recepcion
-    AND t.fecha_hora BETWEEN tc.fecha_inicio AND ISNULL(tc.fecha_fin, '9999-12-31')
-);
+LEFT JOIN TipoCambio tc 
+    ON t.id_moneda_envio = tc.id_moneda_origen 
+    AND r.id_moneda_recepcion = tc.id_moneda_destino
+    AND r.fecha_hora >= tc.fecha_inicio 
+    AND (tc.fecha_fin IS NULL OR r.fecha_hora <= tc.fecha_fin)
+WHERE t.id_moneda_envio <> r.id_moneda_recepcion  -- Solo si son monedas diferentes
+AND tc.id_moneda_origen IS NULL;  -- Si no hay tipo de cambio registrado
 
+
+--PASO 2: Determinar tablas y operaciones que afectan la regla de integridad
+
+------------------------------------------------------------------------------
+-- TABLA         |    INSERT 	 |	  DELETE     |	  UPDATE               |
+------------------------------------------------------------------------------
+-- Transferencia |   controlar   |     ---       |  mod. moneda_recepcion --> controlar   |
+------------------------------------------------------------------------------
+-- Recepcion     |   controlar   |     ---       |  mod. moneda_recepcion --> controlar   |
+------------------------------------------------------------------------------
+-- TipoCambio    |     ---       |   controlar   |  mod. tasa_cambio       --> controlar   |
+------------------------------------------------------------------------------
+
+--PASO 3: Crear los triggers
+
+
+-- TRIGGER para INSERT/UPDATE en Transferencia
+CREATE TRIGGER tiu_ri_transferencia
+ON Transferencia
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM inserted t
+        JOIN Recepcion r ON t.id_transferencia = r.id_transferencia
+        LEFT JOIN TipoCambio tc 
+            ON t.id_moneda_envio = tc.id_moneda_origen 
+            AND r.id_moneda_recepcion = tc.id_moneda_destino
+            AND r.fecha_hora BETWEEN tc.fecha_inicio AND ISNULL(tc.fecha_fin, '9999-12-31')
+        WHERE t.id_moneda_envio <> r.id_moneda_recepcion
+        AND tc.id_moneda_origen IS NULL
+    )
+    BEGIN
+        RAISERROR('No se ha registrado el tipo de cambio para la moneda de recepción.', 16, 1);
+        ROLLBACK TRANSACTION;
+    END
+END;
+
+
+-- TRIGGER para INSERT/UPDATE en Recepcion
+CREATE TRIGGER tiu_ri_recepcion
+ON Recepcion
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM inserted r
+        JOIN Transferencia t ON r.id_transferencia = t.id_transferencia
+        LEFT JOIN TipoCambio tc 
+            ON t.id_moneda_envio = tc.id_moneda_origen 
+            AND r.id_moneda_recepcion = tc.id_moneda_destino
+            AND r.fecha_hora BETWEEN tc.fecha_inicio AND ISNULL(tc.fecha_fin, '9999-12-31')
+        WHERE t.id_moneda_envio <> r.id_moneda_recepcion
+        AND tc.id_moneda_origen IS NULL
+    )
+    BEGIN
+        RAISERROR('No se ha registrado el tipo de cambio para la moneda de recepción.', 16, 1);
+        ROLLBACK TRANSACTION;
+    END
+END;
+
+
+-- TRIGGER para DELETE en TipoCambio
+CREATE TRIGGER td_ri_tipo_cambio
+ON TipoCambio
+AFTER DELETE
+AS
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM deleted tc
+        JOIN Transferencia t ON t.id_moneda_envio = tc.id_moneda_origen
+        JOIN Recepcion r ON t.id_transferencia = r.id_transferencia
+        WHERE t.id_moneda_envio <> r.id_moneda_recepcion
+        AND r.fecha_hora BETWEEN tc.fecha_inicio AND ISNULL(tc.fecha_fin, '9999-12-31')
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar el tipo de cambio porque está en uso.', 16, 1);
+        ROLLBACK TRANSACTION;
+    END
+END;
+
+
+-- TRIGGER para UPDATE en TipoCambio
+CREATE TRIGGER tu_ri_tipo_cambio
+ON TipoCambio
+AFTER UPDATE
+AS
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM inserted tc
+        JOIN Transferencia t ON t.id_moneda_envio = tc.id_moneda_origen
+        JOIN Recepcion r ON t.id_transferencia = r.id_transferencia
+        WHERE t.id_moneda_envio <> r.id_moneda_recepcion
+        AND r.fecha_hora BETWEEN tc.fecha_inicio AND ISNULL(tc.fecha_fin, '9999-12-31')
+        AND tc.id_moneda_origen IS NULL
+    )
+    BEGIN
+        RAISERROR('No se ha registrado el tipo de cambio para la moneda de recepción.', 16, 1);
+        ROLLBACK TRANSACTION;
+    END
+END;
+
+
+
+-- 4.	Programar una función escalar que reciba como argumento el identificador de una transferencia y devuelva el importe de comisión a cobrar en dólares (25)
+
+CREATE FUNCTION dbo.CalcularComisionUSD(@id_transferencia INT)
+RETURNS DECIMAL(18,2)
+AS
+BEGIN
+    DECLARE @monto DECIMAL(18,2);
+    DECLARE @id_pais_origen INT, @id_pais_destino INT;
+    DECLARE @id_metodo_pago INT, @id_metodo_recepcion INT;
+    DECLARE @porcentaje_comision DECIMAL(5,2);
+    DECLARE @id_moneda_envio INT, @id_moneda_usd INT;
+    DECLARE @tasa_cambio DECIMAL(18,4);
+    DECLARE @comision DECIMAL(18,2);
+
+    -- Obtener datos de la transferencia
+    SELECT 
+        @monto = t.monto,
+        @id_pais_origen = s.id_pais,
+        @id_pais_destino = t.id_pais_destino,
+        @id_metodo_pago = t.id_metodo_pago,
+        @id_metodo_recepcion = COALESCE(r.id_metodo_recepcion, 0),
+        @id_moneda_envio = t.id_moneda_envio
+    FROM Transferencia t
+    JOIN Sucursal s ON t.id_sucursal = s.id_sucursal
+    LEFT JOIN Recepcion r ON t.id_transferencia = r.id_transferencia
+    WHERE t.id_transferencia = @id_transferencia;
+    
+    -- Validar existencia de la transferencia
+    IF @monto IS NULL
+        RETURN NULL;
+    
+    -- Obtener porcentaje de comisión
+    SELECT TOP 1 @porcentaje_comision = cd.porcentaje_comision
+    FROM Comision_Detalle cd
+    JOIN Comision_Rango cr ON cd.id_comision_rango = cr.id_comision_rango
+    WHERE 
+        cd.id_pais_origen = @id_pais_origen 
+        AND cd.id_pais_destino = @id_pais_destino
+        AND cd.id_metodo_pago = @id_metodo_pago
+        AND cd.id_metodo_recepcion = @id_metodo_recepcion
+        AND @monto BETWEEN cr.monto_min AND cr.monto_max
+    ORDER BY cr.monto_min DESC;
+    
+    -- Validar existencia de porcentaje de comisión
+    IF @porcentaje_comision IS NULL
+        RETURN NULL;
+    
+    -- Calcular la comisión
+    SET @comision = (@monto * @porcentaje_comision) / 100;
+    
+    -- Identificar el ID de la moneda USD
+    SELECT @id_moneda_usd = id_moneda FROM Moneda WHERE codigo_iso = 'USD';
+    
+    -- Obtener la tasa de cambio si la moneda de envío no es USD
+    IF @id_moneda_envio <> @id_moneda_usd
+    BEGIN
+        SELECT TOP 1 @tasa_cambio = tasa_cambio
+        FROM TipoCambio
+        WHERE id_moneda_origen = @id_moneda_envio 
+              AND id_moneda_destino = @id_moneda_usd
+              AND fecha_inicio <= GETDATE()
+              AND (fecha_fin IS NULL OR fecha_fin >= GETDATE())
+        ORDER BY fecha_inicio DESC;
+        
+        -- Convertir comisión a USD si hay tasa de cambio válida
+        IF @tasa_cambio IS NOT NULL
+            SET @comision = @comision * @tasa_cambio;
+    END
+    
+    RETURN @comision;
+END;
+
+
+
+--Ejecutar la función para obtener la comisión en USD
+SELECT dbo.CalcularComisionUSD(1) AS ComisionEnUSD;
