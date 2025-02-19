@@ -141,29 +141,30 @@
 ' metodo_recepcion
 ' porcentaje_comision
 
+@startuml
 
 class Cliente {
     id_cliente: int
     --
-    nombre: varchar
-    apellido: varchar
-    documento: varchar
-    telefono: varchar
-    email: varchar
+    nombre: nvarchar(100)
+    apellido: nvarchar(100)
+    documento: nvarchar(20)
+    telefono: nvarchar(20)
+    email: nvarchar(100)
+    id_pais: int
 }
 
 class Pais {
     id_pais: int
     --
-    nombre: varchar
+    nombre: nvarchar(100)
 }
-
 
 class Sucursal {
     id_sucursal: int
     --
-    nombre: varchar
-    localidad: varchar
+    nombre: nvarchar(100)
+    localidad: nvarchar(100)
     id_pais: int
 }
 
@@ -171,15 +172,27 @@ class Agente{
     id_agente: int
     --
     id_sucursal: int
-    apellido: varchar
-    nombre: varchar
+    apellido: nvarchar(100)
+    nombre: nvarchar(100)
 }
 
 class Moneda {
     id_moneda: int
     --
-    codigo_iso: varchar 
-    nombre: varchar
+    codigo_iso: char(3)
+    nombre: nvarchar(50)
+}
+
+class MetodoPago {
+    id_metodo_pago: int
+    --
+    descripcion: nvarchar(50)
+}
+
+class MetodoRecepcion {
+    id_metodo_recepcion: int
+    --
+    descripcion: nvarchar(50)
 }
 
 class Transferencia {
@@ -189,13 +202,13 @@ class Transferencia {
     id_destinatario: int
     id_sucursal: int
     id_agente: int
-    fecha_hora: datetime
-    monto: float
+    fecha_hora: datetime2
+    monto: decimal(18,2)
     id_moneda_envio: int
-    metodo_envio: varchar
-    cbu_envio: varchar
-    codigo_tarjeta: varchar
-    mtcn: varchar
+    id_metodo_pago: int
+    cbu_envio: nvarchar(22)
+    codigo_tarjeta: nvarchar(16)
+    mtcn: char(10)
     id_moneda_recepcion: int
 }
 
@@ -205,45 +218,54 @@ class Recepcion {
     id_transferencia: int
     id_sucursal: int
     id_agente: int
-    fecha_hora: datetime
-    metodo_recepcion: varchar
-    cbu_recepcion: varchar
+    fecha_hora: datetime2
+    id_metodo_recepcion: int
+    cbu_recepcion: nvarchar(22)
+    id_moneda_recepcion: int
 }
 
 class TipoCambio {
-    id_tipo_cambio: int
-    --
     id_moneda_origen: int
     id_moneda_destino: int
-    fecha_inicio: datetime
-    fecha_fin: datetime
-    tasa_cambio: float
+    fecha_inicio: datetime2
+    fecha_fin: datetime2
+    tasa_cambio: decimal(18,4)
 }
 
-class Comision {
-    id_comision: int
+class Comision_Rango {
+    id_comision_rango: int
     --
-    monto_min: float
-    monto_max: float
+    monto_min: decimal(18,2)
+    monto_max: decimal(18,2)
+}
+
+class Comision_Detalle {
+    id_comision_detalle: int
+    --
+    id_comision_rango: int
     id_pais_origen: int
     id_pais_destino: int
-    metodo_envio: varchar
-    metodo_recepcion: varchar
-    porcentaje_comision: float
+    id_metodo_pago: int
+    id_metodo_recepcion: int
+    porcentaje_comision: decimal(5,2)
 }
 
-
-Sucursal "1"..{ Agente
-Cliente "1"..{ Transferencia
-Sucursal "1"..{ Transferencia
-Agente "0"..{ Transferencia
-Moneda "0"..{ Transferencia
-Transferencia "1"..{ Recepcion
-Sucursal "1"..{ Recepcion
-Agente "0"..{ Recepcion
-Moneda "1"..{ TipoCambio
-Sucursal "1"..{ Comision
-
 Pais "1" ..{ Sucursal
+Sucursal "1" ..{ Agente
+Sucursal "1" ..{ Transferencia
+Cliente "1" ..{ Transferencia
+Agente "0" ..{ Transferencia
+Moneda "0" ..{ Transferencia : (obligatorio para moneda envio)
+MetodoPago "1" ..{ Transferencia
+Transferencia "1" ..{ Recepcion
+Sucursal "1" ..{ Recepcion
+Agente "0" ..{ Recepcion
+MetodoRecepcion "1" ..{ Recepcion
+Moneda "1"--{ TipoCambio
+Comision_Rango "1" ..{ Comision_Detalle
+Pais "1" ..{ Comision_Detalle
+MetodoPago "1" ..{ Comision_Detalle
+MetodoRecepcion "1" ..{ Comision_Detalle
+Pais "1" ..{ Cliente
 
 @enduml

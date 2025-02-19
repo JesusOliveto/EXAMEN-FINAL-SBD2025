@@ -74,108 +74,138 @@ CREATE DATABASE TransferenciasWU;
 GO
 USE TransferenciasWU;
 GO
-
 -- Tabla de Países
 CREATE TABLE Pais (
-    id_pais INT PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL UNIQUE
+    id_pais INT PRIMARY KEY IDENTITY(1,1),
+    nombre NVARCHAR(100) NOT NULL UNIQUE
+);
+
+-- Tabla de Métodos de Pago
+CREATE TABLE MetodoPago (
+    id_metodo_pago INT PRIMARY KEY IDENTITY(1,1),
+    descripcion NVARCHAR(50) NOT NULL UNIQUE
+);
+
+-- Tabla de Métodos de Recepción
+CREATE TABLE MetodoRecepcion (
+    id_metodo_recepcion INT PRIMARY KEY IDENTITY(1,1),
+    descripcion NVARCHAR(50) NOT NULL UNIQUE
 );
 
 -- Tabla de Sucursales
 CREATE TABLE Sucursal (
-    id_sucursal INT PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    localidad VARCHAR(100) NOT NULL,
+    id_sucursal INT PRIMARY KEY IDENTITY(1,1),
+    nombre NVARCHAR(100) NOT NULL,
+    localidad NVARCHAR(100) NOT NULL,
     id_pais INT NOT NULL,
     FOREIGN KEY (id_pais) REFERENCES Pais(id_pais)
 );
 
 -- Tabla de Agentes
 CREATE TABLE Agente (
-    id_agente INT PRIMARY KEY,
+    id_agente INT PRIMARY KEY IDENTITY(1,1),
     id_sucursal INT NOT NULL,
-    apellido VARCHAR(100) NOT NULL,
-    nombre VARCHAR(100) NOT NULL,
+    apellido NVARCHAR(100) NOT NULL,
+    nombre NVARCHAR(100) NOT NULL,
     FOREIGN KEY (id_sucursal) REFERENCES Sucursal(id_sucursal)
 );
 
 -- Tabla de Clientes
 CREATE TABLE Cliente (
-    id_cliente INT PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    apellido VARCHAR(100) NOT NULL,
-    documento VARCHAR(50) NOT NULL UNIQUE,
-    telefono VARCHAR(20),
-    email VARCHAR(100)
+    id_cliente INT PRIMARY KEY IDENTITY(1,1),
+    nombre NVARCHAR(100) NOT NULL,
+    apellido NVARCHAR(100) NOT NULL,
+    documento NVARCHAR(20) NOT NULL UNIQUE,
+    telefono NVARCHAR(20),
+    email NVARCHAR(100),
+    id_pais INT NOT NULL,
+    FOREIGN KEY (id_pais) REFERENCES Pais(id_pais)
 );
 
 -- Tabla de Monedas
 CREATE TABLE Moneda (
-    id_moneda INT PRIMARY KEY,
-    codigo_iso VARCHAR(3) NOT NULL UNIQUE,
-    nombre VARCHAR(50) NOT NULL
+    id_moneda INT PRIMARY KEY IDENTITY(1,1),
+    codigo_iso CHAR(3) NOT NULL UNIQUE,
+    nombre NVARCHAR(50) NOT NULL
 );
 
 -- Tabla de Transferencias
 CREATE TABLE Transferencia (
-    id_transferencia INT PRIMARY KEY,
+    id_transferencia INT PRIMARY KEY IDENTITY(1,1),
     id_remitente INT NOT NULL,
     id_destinatario INT NOT NULL,
-    id_sucursal INT NOT NULL,
+    id_sucursal INT NULL,
     id_agente INT NULL,
-    fecha_hora DATETIME NOT NULL,
-    monto FLOAT NOT NULL,
+    fecha_hora DATETIME2 NOT NULL,
+    monto DECIMAL(18,2) NOT NULL,
     id_moneda_envio INT NOT NULL,
-    metodo_envio VARCHAR(20) NOT NULL CHECK (metodo_envio IN ('efectivo', 'transferencia', 'tarjeta de débito')),
-    cbu_envio VARCHAR(22) NULL,
-    codigo_tarjeta VARCHAR(16) NULL,
-    mtcn VARCHAR(10) NULL,
+    id_metodo_pago INT NOT NULL,
+    cbu_envio NVARCHAR(22) NULL,
+    codigo_tarjeta NVARCHAR(16) NULL,
+    mtcn CHAR(10) NULL,
     id_moneda_recepcion INT NULL,
     FOREIGN KEY (id_remitente) REFERENCES Cliente(id_cliente),
     FOREIGN KEY (id_destinatario) REFERENCES Cliente(id_cliente),
     FOREIGN KEY (id_sucursal) REFERENCES Sucursal(id_sucursal),
     FOREIGN KEY (id_agente) REFERENCES Agente(id_agente),
     FOREIGN KEY (id_moneda_envio) REFERENCES Moneda(id_moneda),
-    FOREIGN KEY (id_moneda_recepcion) REFERENCES Moneda(id_moneda)
+    FOREIGN KEY (id_moneda_recepcion) REFERENCES Moneda(id_moneda),
+    FOREIGN KEY (id_metodo_pago) REFERENCES MetodoPago(id_metodo_pago),
+    CONSTRAINT chk_cbu_o_tarjeta CHECK (
+        (cbu_envio IS NOT NULL AND codigo_tarjeta IS NULL) OR
+        (codigo_tarjeta IS NOT NULL AND cbu_envio IS NULL)
+    )
 );
 
 -- Tabla de Recepción del Dinero
 CREATE TABLE Recepcion (
-    id_recepcion INT PRIMARY KEY,
+    id_recepcion INT PRIMARY KEY IDENTITY(1,1),
     id_transferencia INT NOT NULL UNIQUE,
-    id_sucursal INT NOT NULL,
+    id_sucursal INT NULL,
     id_agente INT NULL,
-    fecha_hora DATETIME NOT NULL,
-    metodo_recepcion VARCHAR(20) NOT NULL CHECK (metodo_recepcion IN ('efectivo', 'cuenta bancaria')),
-    cbu_recepcion VARCHAR(22) NULL,
+    fecha_hora DATETIME2 NOT NULL,
+    id_metodo_recepcion INT NOT NULL,
+    cbu_recepcion NVARCHAR(22) NULL,
+    id_moneda_recepcion INT NULL,
     FOREIGN KEY (id_transferencia) REFERENCES Transferencia(id_transferencia),
     FOREIGN KEY (id_sucursal) REFERENCES Sucursal(id_sucursal),
-    FOREIGN KEY (id_agente) REFERENCES Agente(id_agente)
+    FOREIGN KEY (id_agente) REFERENCES Agente(id_agente),
+    FOREIGN KEY (id_metodo_recepcion) REFERENCES MetodoRecepcion(id_metodo_recepcion),
+    FOREIGN KEY (id_moneda_recepcion) REFERENCES Moneda(id_moneda)
 );
 
 -- Tabla de Tipos de Cambio
 CREATE TABLE TipoCambio (
-    id_tipo_cambio INT PRIMARY KEY,
     id_moneda_origen INT NOT NULL,
     id_moneda_destino INT NOT NULL,
-    fecha_inicio DATETIME NOT NULL,
-    fecha_fin DATETIME NOT NULL,
-    tasa_cambio FLOAT NOT NULL,
-    CHECK (fecha_inicio < fecha_fin),
+    fecha_inicio DATETIME2 NOT NULL,
+    fecha_fin DATETIME2 NOT NULL,
+    tasa_cambio DECIMAL(18,4) NOT NULL,
+    PRIMARY KEY (id_moneda_origen, id_moneda_destino, fecha_inicio, fecha_fin),
     FOREIGN KEY (id_moneda_origen) REFERENCES Moneda(id_moneda),
-    FOREIGN KEY (id_moneda_destino) REFERENCES Moneda(id_moneda)
+    FOREIGN KEY (id_moneda_destino) REFERENCES Moneda(id_moneda),
+    CONSTRAINT chk_fecha_tipo_cambio CHECK (fecha_inicio < fecha_fin)
 );
 
--- Tabla de Comisiones
-CREATE TABLE Comision (
-    id_comision INT PRIMARY KEY,
-    monto_min FLOAT NOT NULL,
-    monto_max FLOAT NOT NULL,
+-- Tabla de Rango de Comisiones
+CREATE TABLE Comision_Rango (
+    id_comision_rango INT PRIMARY KEY IDENTITY(1,1),
+    monto_min DECIMAL(18,2) NOT NULL,
+    monto_max DECIMAL(18,2) NOT NULL
+);
+
+-- Tabla de Detalles de Comisiones
+CREATE TABLE Comision_Detalle (
+    id_comision_detalle INT PRIMARY KEY IDENTITY(1,1),
+    id_comision_rango INT NOT NULL,
     id_pais_origen INT NOT NULL,
     id_pais_destino INT NOT NULL,
-    metodo_envio VARCHAR(20) NOT NULL,
-    metodo_recepcion VARCHAR(20) NOT NULL,
-    porcentaje_comision FLOAT NOT NULL,
+    id_metodo_pago INT NOT NULL,
+    id_metodo_recepcion INT NOT NULL,
+    porcentaje_comision DECIMAL(5,2) NOT NULL,
+    FOREIGN KEY (id_comision_rango) REFERENCES Comision_Rango(id_comision_rango),
     FOREIGN KEY (id_pais_origen) REFERENCES Pais(id_pais),
-    FOREIGN KEY (id_pais_destino) REFERENCES Pais(id_pais)
+    FOREIGN KEY (id_pais_destino) REFERENCES Pais(id_pais),
+    FOREIGN KEY (id_metodo_pago) REFERENCES MetodoPago(id_metodo_pago),
+    FOREIGN KEY (id_metodo_recepcion) REFERENCES MetodoRecepcion(id_metodo_recepcion)
 );
